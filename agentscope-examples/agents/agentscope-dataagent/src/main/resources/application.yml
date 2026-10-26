@@ -91,9 +91,13 @@ dataagent:
 
   # ---- DashScope model (used when no Model Spring bean is present) ----
   # Set DASHSCOPE_API_KEY env var or override api-key below.
+  # base-url: when set to an OpenAI-compatible endpoint (…/compatible-mode/v1), the model is
+  # built as an OpenAIChatModel against that URL; leave blank to use native DashScope
+  # (dashscope.aliyuncs.com).
   dashscope:
-    api-key: ${DASHSCOPE_API_KEY:}
-    model-name: ${DATAAGENT_MODEL_NAME:qwen-max}
+    api-key: ${DASHSCOPE_API_KEY:sk-a45bcf5307b2499fa0e07f022abdc221}
+    base-url: ${DATAAGENT_DASHSCOPE_BASE_URL:https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1}
+    model-name: ${DATAAGENT_MODEL_NAME:qwen3.8-flash}
     stream: true
 
   # ---- Agent defaults (used when auto-generating agentscope.json) ----
@@ -122,7 +126,7 @@ dataagent:
       enabled: false
       host: localhost
       port: 6379
-      password:
+      password: tradingagents123
       database: 0
       key-prefix: "dataagent:session:"
 

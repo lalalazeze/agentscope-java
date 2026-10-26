@@ -56,6 +56,13 @@
             <artifactId>agentscope-extensions-model-dashscope</artifactId>
         </dependency>
 
+        <!-- OpenAI-compatible model: used when dataagent.dashscope.base-url points at a
+             compatible-mode/v1 endpoint (e.g. a Qianwen proxy) instead of native DashScope. -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-openai</artifactId>
+        </dependency>
+
         <!-- IM channel implementations -->
         <dependency>
             <groupId>io.agentscope</groupId>

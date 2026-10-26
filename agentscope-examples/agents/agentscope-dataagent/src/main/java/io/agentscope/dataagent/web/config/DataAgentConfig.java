@@ -29,13 +29,16 @@ import io.agentscope.dataagent.web.toolbus.ToolEventBus;
 import io.agentscope.dataagent.web.toolbus.ToolNotificationMiddleware;
 import io.agentscope.dataagent.web.workspace.UserSandboxRegistry;
 import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
+import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.IsolationScope;
+import io.agentscope.harness.agent.filesystem.local.LocalFilesystem;
 import io.agentscope.harness.agent.gateway.channel.ChannelConfig;
 import io.agentscope.harness.agent.gateway.channel.DmScope;
 import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
 import io.agentscope.harness.agent.sandbox.SandboxClient;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerSandboxClientOptions;
+import io.agentscope.harness.agent.session.WorkspaceSessionLogStore;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -109,6 +112,9 @@ public class DataAgentConfig {
     @Value("${dataagent.dashscope.stream:true}")
     private boolean dashscopeStream;
 
+    @Value("${dataagent.dashscope.base-url:}")
+    private String dashscopeBaseUrl;
+
     @Value(
             "${dataagent.agent.sys-prompt:You are a Data Agent built with AgentScope."
                     + " You help users explore, analyse, visualise and report on data.}")
@@ -137,6 +143,22 @@ public class DataAgentConfig {
     @ConditionalOnMissingBean(Model.class)
     @ConditionalOnExpression("'${dataagent.dashscope.api-key:}' != ''")
     public Model dashscopeModel() {
+        // A compatible-mode base URL (e.g. https://.../compatible-mode/v1) speaks the OpenAI
+        // protocol. DashScopeChatModel only speaks DashScope's native protocol against
+        // dashscope.aliyuncs.com (and ignores a custom base URL entirely), so route such
+        // endpoints through OpenAIChatModel, which honours baseUrl + /chat/completions.
+        if (dashscopeBaseUrl != null && !dashscopeBaseUrl.isBlank()) {
+            log.info(
+                    "Building OpenAI-compatible model: model={}, baseUrl={}",
+                    dashscopeModelName,
+                    dashscopeBaseUrl);
+            return OpenAIChatModel.builder()
+                    .apiKey(dashscopeApiKey)
+                    .baseUrl(dashscopeBaseUrl)
+                    .modelName(dashscopeModelName)
+                    .stream(dashscopeStream)
+                    .build();
+        }
         log.info("Building DashScopeChatModel: model={}", dashscopeModelName);
         return DashScopeChatModel.builder()
                 .apiKey(dashscopeApiKey)
@@ -221,6 +243,13 @@ public class DataAgentConfig {
                     AgentStateStore.class.getName());
         }
 
+        // The sandbox-backed filesystem is a shell/exec surface only: it does not implement
+        // durable sessionStorage, so the native session journal has to live on a host-side
+        // durable LocalFilesystem outside the container. Otherwise every chat turn fails when
+        // AgentSession opens its SessionLog (UnsupportedOperationException).
+        Path sessionLogRoot = cwd.resolve(".agentscope").resolve("session-log");
+        Files.createDirectories(sessionLogRoot);
+
         builder.configureAllAgents(
                 b -> {
                     b.middleware(new ToolNotificationMiddleware(toolEventBus));
@@ -229,6 +258,8 @@ public class DataAgentConfig {
                             new DockerFilesystemSpec()
                                     .client(sandboxClient)
                                     .isolationScope(IsolationScope.USER));
+                    b.sessionLogStore(
+                            new WorkspaceSessionLogStore(new LocalFilesystem(sessionLogRoot)));
                 });
 
         DataAgentBootstrap bootstrap = builder.build();
